@@ -15,14 +15,16 @@ def convert_file_name(name: str) -> str:
 
 def get_cfg(section: str, key: str):
     parser = ConfigParser()
-    parser.read('./config.ini', encoding='utf-8')
+    with open('./config.ini', 'r', encoding='utf-8') as f:
+        parser.read_file(f)
     return dict(parser.items(section))[key]
 
 
 def filter_comics(comics, by_id=True, by_categories=True) -> list:
     # 过滤掉已下载的本子
     if by_id:
-        ids = open('./downl.txt', 'r').read().split('\n')
+        with open('./downl.txt', 'r') as f:
+            ids = f.read().split('\n')
         comics = [i for i in comics if i['_id'] not in ids]
 
     # 过滤掉指定分区的本子
@@ -45,18 +47,13 @@ def download(self, name: str, i: int, url: str):
     path = './comics/' + convert_file_name(name) + '/' + str(i + 1).zfill(4) + '.jpg'
     if os.path.exists(path):
         return
-
-    f = open(path, 'wb')
-    f.write(self.http_do("GET", url=url).content)
-    f.close()
-
-
+    with open(path, 'wb') as f:
+        f.write(self.http_do("GET", url=url).content)
 def generate_random_str(str_length=16):
     random_str = ''
     base_str = 'ABCDEFGHIGKLMNOPQRSTUVWXYZabcdefghigklmnopqrstuvwxyz0123456789'
     length = len(base_str) - 1
-    for i in range(str_length):
-        random_str += base_str[random.randint(0, length)]
+    random_str = ''.join(random.choice(base_str) for _ in range(str_length))
     return random_str
 
 
