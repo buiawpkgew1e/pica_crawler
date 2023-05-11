@@ -86,7 +86,7 @@
 
 ### 过滤重复下载
 
-downloaded.txt文件记录了已下载的漫画id. 每次运行代码后,都会通过git actions的指令提交代码,保存本次的运行结果   
+downloaded.txt（downl.txt本库）文件记录了已下载的漫画id. 每次运行代码后,都会通过git actions的指令提交代码,保存本次的运行结果   
 在下载前手动插入id,可以跳过对应漫画的下载   
 
 
