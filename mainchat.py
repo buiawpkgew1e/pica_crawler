@@ -72,9 +72,9 @@ for keyword in SUBSCRIBE_KEYWORD:
     comics += subscribe_comics
 
 # 下载漫画并收藏
-print('id | 本子 | 画师 | 分区')
 for comic in comics:
     try:
+        print('id | 本子 | 画师 | 分区')
         download_comic(p, comic)
         info = p.comic_info(comic['_id'])
         if info['data']['comic']['isFavourite']:
