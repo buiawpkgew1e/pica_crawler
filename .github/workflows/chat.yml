@@ -2,7 +2,10 @@ name: pica_crawler
 
 on:
   workflow_dispatch:
-  
+  push:
+    paths:
+      - '**.py'
+      - '**.yml'
 
 jobs:
   main:
@@ -33,7 +36,7 @@ jobs:
           SUBSCRIBE_DAYS: 9000
           #  
         run: |
-          python main.py
+          python mainchat.py
           git add downl.txt
           7z a -r "comics/finder-result.zip" "comics/*"
       # - name: 压缩下载的漫画
