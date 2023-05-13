@@ -1,5 +1,3 @@
-# 合并多个本子,将同一本放入相同文件夹,按章节顺序升序命名文件夹
-
 import os
 import shutil
 
@@ -19,8 +17,7 @@ index = 1 if not target_files else int(target_files[-1].split('.')[0]) + 1
 
 dirs = os.listdir(path)
 dirs.remove(target)
-for i in range(len(dirs)):
-    d = dirs[i]
+for d in dirs:
     pics = os.listdir(path + d)
     pics.sort(key=lambda x: str(x.split('.')[0]))
 
@@ -29,4 +26,4 @@ for i in range(len(dirs)):
         os.rename(source + p, path + target + '/' + str(index).zfill(4) + '.jpg')
         index += 1
     shutil.rmtree(source)
-    print('merge finished,' + d + ' removed------------------------------------')
+    print('merge finished, ' + d + ' removed------------------------------------')
