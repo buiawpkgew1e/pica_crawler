@@ -44,7 +44,7 @@ jobs:
       #   with:
       #     name: pica-comics
       #     path: comics/
-      #     retention-days: 90
+      #     retention-days: 9
       - name: commit & push
         uses: actions-go/push@master
         with:
