@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import threading
+import traceback
 
 from client import Pica
 from util import *
@@ -18,24 +19,31 @@ SUBSCRIBE_KEYWORD = os.environ.get('SUBSCRIBE_KEYWORD', '').split(',')
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf8')
 
 # 下载漫画
-def download_comic(p, comic):
+def download_comic(p, comic,only_latest):
+    print(only_latest)
     cid = comic['_id']
     title = comic['title']
     author = comic['author']
     categories = comic['categories']
-    print(f'{cid} | {title} | {author} | {categories}: downloading---------------------')
+    print(f'{cid} | {title} | {author} | {categories}| {only_latest}: downloading---------------------')
     res = []
     episodes = p.episodes_all(cid)
+
+    # 增量更新
+    if only_latest:
+        episodes = filter_comics(comic, episodes)
+
+    pics = []
+
     for eid in episodes:
         page = 1
         while True:
             docs = json.loads(p.picture(cid, eid['order'], page).content)['data']['pages']['docs']
             page += 1
             if docs:
-                res.extend(docs)
+                pics.extend(list(map(lambda i: i['media']['fileServer'] + '/static/' + i['media']['path'], docs)))
             else:
                 break
-    pics = [i['media']['fileServer'] + '/static/' + i['media']['path'] for i in res]
 
     # todo pica服务器抽风了,没返回图片回来,有知道原因的大佬麻烦联系下我
     if not pics:
@@ -65,27 +73,29 @@ p.login()
 p.punch_in()
 
 # 获取漫画列表
-comics = filter_comics(p.leaderboard()) + p.my_favourite()
+comics = p.leaderboard()
 for keyword in SUBSCRIBE_KEYWORD:
-    subscribe_comics = filter_comics(p.search_all(keyword))
+    subscribe_comics = p.search_all(keyword)
     print(f'关键词{keyword} : 订阅了{len(subscribe_comics)}本漫画')
     comics += subscribe_comics
+favourites = p.my_favourite()
 
 # 下载漫画并收藏
-for comic in comics:
+for comic in favourites + comics:
     try:
         print('id | 本子 | 画师 | 分区')
-        download_comic(p, comic)
+        # 收藏夹:全量下载  其余:增量下载
+        download_comic(comic, comic not in favourites)
         info = p.comic_info(comic['_id'])
         if info['data']['comic']['isFavourite']:
-            p.favourite(comic['_id'])
+            p.favourite(comic["_id"])
     except KeyError:
-        print(f'download failed,{comic}')
+        print('download failed,{},{},{}', comic['_id'], comic["title"], traceback.format_exc())
         continue
 
-# 压缩漫画文件夹
-if not os.path.exists(DOWNLOAD_PATH):
-    os.mkdir(DOWNLOAD_PATH)
-if not os.path.exists(ZIP_PATH):
-    os.mkdir(ZIP_PATH)
-zip_file(DOWNLOAD_PATH, ZIP_PATH, sys.maxsize)
+# # 压缩漫画文件夹
+# if not os.path.exists(DOWNLOAD_PATH):
+#     os.mkdir(DOWNLOAD_PATH)
+# if not os.path.exists(ZIP_PATH):
+#     os.mkdir(ZIP_PATH)
+# zip_file(DOWNLOAD_PATH, ZIP_PATH, sys.maxsize)
