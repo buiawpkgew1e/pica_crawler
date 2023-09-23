@@ -28,38 +28,23 @@ jobs:
           PICA_ACCOUNT: ${{secrets.PICA_ACCOUNT}}
           PICA_PASSWORD: ${{secrets.PICA_PASSWORD}}
           # 过滤分区 用,分隔
-          CATEGORIES: CG雜圖,生肉,耽美花園,偽娘哲學,扶他樂園,性轉換,SAO 刀劍神域,WEBTOON,Cosplay
+          CATEGORIES: 性轉換
           # CATEGORIES_RULE 过滤规则    INCLUDE: 包含任意一个分区就下载  EXCLUDE: 包含任意一个分区就不下载
-          CATEGORIES_RULE: EXCLUDE
+          CATEGORIES_RULE: INCLUDE
           # 订阅的关键词,会下载x天范围内上传的漫画    为空则关闭关键词订阅 用,分隔
-          SUBSCRIBE_KEYWORD: ひぐま屋 (野良ヒグマ),アキレルショウジョ,オクモト悠太,ゐちぼっち,黒本君,もすきーと音
+          SUBSCRIBE_KEYWORD: みこやん,TSFのF (NOMU),夢先案内回覧版 (ひろひろき),ノボッチ製作所 (南雲龍一),fu-ta,くまQM,あむぁいおかし製作所 (かいわれ大根、あほげきのこ),Duckgu,山本同人,pulltop,いづみ(CHIPS),わろみん家 (わろみん),カネコナオヤ,聖華快楽書店 (エルトリア、夜空さくら、nikujaga),タカスギコウ,憑依の刻,ジンギスカンの玉葱は俺の嫁 (谷口さん),小飛鼠,影魔尤影,マメック星,拍手喝罪（我宮てれさ）,jm600r,あむぁいおかし製作所 (つく丸、なまむぎ),ZPT (ポミヲ),あむぁいおかし製作所 (倉塚りこ),若宮参太,花巻かえる,不明,アンソロジー,龍企画 (龍炎狼牙),竹とんぼ (菜葉),MAX&Cool,くれじっと,狐梅珈琲店 (鹽、彩月あたん),そらりれゆ,Story Circle (瀬戸こうへい、かんむり)一千零一夜cos社,奥森ボウイ,永田まりあ,RIX (マミヤ),うどんや (鬼月あるちゅ、ZAN),U.R.C(桃屋しょう貓),羽贺ソウケン 長尾件,くろむら基人,STUDIO&PIM-DOG,クリスタルな洋介,ハシモトミツ,THE猥談 (鬱ノ宮うかつ),しまなみ (あーきぺらご),ノードラッグハイテンション(水乃カルキ),ふずめ,谷口さん,桃純 (ももずみ純),ゆきしずく (ながねこ),うえにあるみかん,きのこのみ (konomi),ciaociao (あらきかなお),Duokuma,矢吹健太郎,たまの父,Asunaro Neat. (ろんな),Tempest (伊巻てん、温野りょく),BEHIND THE MASK (蜜子。),KABA,Marialite (ゆーきぃ),クリスタルな洋介,吉田悟郎商會 (吉田悟郎),すらいむのかんむり (かんむり),もげたま (田中森よこた),I'm moralist (柳原ミツキ、犬侍、かに村えびお),千之 ナイフ(Senno Knife)(千之刃),TSF no F (べってぃ),あむぁいおかし製作所 (かいわれ大根、つく丸),晴濑ひろき,伊佐美ノゾミ,狼亮輔,安治ぽん太郎,アラタ,黑澤清崇,牧野坂シンイチ,Blue Crest (蒼野アキラ)
           # 订阅的x天范围     git actions运行时填小一点,免得漫画过多邮箱推送不了,本地运行时随便填
-          SUBSCRIBE_DAYS: 7
+          SUBSCRIBE_DAYS: 90000000
         run: |
           python main.py
           git add downl.txt
           7z a -r "comics/finder-result.zip" "comics/*"
-      - name: upload-artifact
-        uses: actions/upload-artifact@v3.1.0
-        with:
-          name: pica-comics
-          path: comics/
-          retention-days: 90
-      - name: send email
-        env:
-          EMAIL_ACCOUNT: ${{secrets.EMAIL_ACCOUNT}}
-          EMAIL_AUTH_CODE: ${{secrets.EMAIL_AUTH_CODE}}
-          # 收信邮箱的smtp服务器地址
-          EMAIL_SERVER_HOST: smtp.qq.com
-          # 压缩包的最大大小(MB),也就是收信邮箱支持的最大附件大小 qq/新浪:50  outlook:20
-          EMAIL_ATTACH_SIZE: 50
-          # 收信邮箱服务器的加密方式 true:STARTTLS false:TLS    outlook邮箱只能为true,qq邮箱true和false都可以
-          EMAIL_STARTTLS: true
-          # 收信邮箱服务器的端口
-          EMAIL_SERVER_PORT: 587
-        run: |
-          # python sendEmail.py
-          echo '如果不需要邮件推送的功能,可以将上一行代码注释掉     首次运行时也建议注释,排行榜上的漫画都没推送过,邮箱接受不了大量的漫画,等首次运行结束后再开启'
+      # - name: upload-artifact
+      #   uses: actions/upload-artifact@v3.1.0
+      #   with:
+      #     name: pica-comics
+      #     path: comics/
+      #     retention-days: 90
       - name: commit & push
         uses: actions-go/push@master
         with:
