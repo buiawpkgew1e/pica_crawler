@@ -38,6 +38,7 @@ jobs:
         run: |
           python main.py
           git add downl.txt
+          git add run_time_history.txt
           7z a -r "comics/finder-result.zip" "comics/*"
       # - name: upload-artifact
       #   uses: actions/upload-artifact@v3.1.0
