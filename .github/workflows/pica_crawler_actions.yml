@@ -28,7 +28,7 @@ jobs:
           PICA_SECRET_KEY: ${{secrets.PICA_SECRET_KEY}}
           PICA_ACCOUNT: ${{secrets.PICA_ACCOUNT}}
           PICA_PASSWORD: ${{secrets.PICA_PASSWORD}}
-          # 过滤分区 用,分隔
+          # 过滤分区 用,分隔 
           CATEGORIES: 性轉換
           # CATEGORIES_RULE 过滤规则    INCLUDE: 包含任意一个分区就下载  EXCLUDE: 包含任意一个分区就不下载
           CATEGORIES_RULE: INCLUDE
