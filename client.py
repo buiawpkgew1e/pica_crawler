@@ -127,6 +127,7 @@ class Pica:
                     break
         return comics
 
+    # 分区
     def categories(self):
         url = f"{base}categories"
         return self.http_do("GET", url=url)
@@ -147,3 +148,9 @@ class Pica:
         url = f"{base}/users/punch-in"
         res = self.http_do("POST", url=url)
         return json.loads(res.content.decode())
+
+    # 漫画-高级搜索
+    def advanced_search(self, keyword, page=1, sort=Order_Latest):
+        url = f"{base}comics/advanced-search?page={page}"
+        res = self.http_do("POST", url=url, json={"keyword": keyword, "sort": sort})
+        return json.loads(res.content.decode("utf-8"))["data"]["comics"]
