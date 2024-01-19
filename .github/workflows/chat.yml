@@ -7,8 +7,7 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - '**.py'
-      - '.github/workflows/chat.yml'
+      - 'mainchat.py'
 
 jobs:
   main:

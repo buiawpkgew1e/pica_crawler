@@ -7,8 +7,7 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - '**.py'
-      - '.github/workflows/pica_crawler_actions.yml'
+      - 'main.py'
 
 jobs:
   main:
