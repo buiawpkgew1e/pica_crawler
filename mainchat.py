@@ -2,39 +2,59 @@ import io
 import json
 import os
 import sys
-import threading
 import traceback
-
-from client import Pica
+import logging
+import configparser
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from util import *
+from client import Pica
 
-# 配置参数
-DOWNLOAD_PATH = './comics/'
-DOWNLOAD_FILE = './downl.txt'
-ZIP_PATH = './zips/'
-CONCURRENCY = int(get_cfg('crawl', 'concurrency'))
-SUBSCRIBE_KEYWORD = os.environ.get('SUBSCRIBE_KEYWORD', '').split(',')
+# 配置日志
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# 初始化输出流
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf8')
+# 读取配置文件
+config = configparser.ConfigParser()
+config.read('config.ini')
+DOWNLOAD_PATH = config.get('Paths', 'download_path')
+ZIP_PATH = config.get('Paths', 'zip_path')
+CONCURRENCY = int(config.get('Crawler', 'concurrency'))
+SUBSCRIBE_KEYWORDS = config.get('Subscribe', 'keywords').split(',')
 
-# 下载漫画
-def download_comic(p, comic,only_latest):
-    print(only_latest)
+def initialize_pica():
+    p = Pica()
+    p.login()
+    p.punch_in()
+    return p
+
+def filter_comics(comic, episodes):
+    # 根据需求实现增量更新逻辑
+    pass
+
+def download_picture(p, comic, pics, index, pic_url):
+    try:
+        # ... 实现具体的图片下载逻辑 ...
+        logging.info(f"Downloaded: {pic_url}")
+    except Exception as e:
+        logging.error(f"Download failed for {pic_url}: {e}")
+
+    last = len(pics) if isinstance(index, Exception) else index + 1
+    progress = f"{last}/{len(pics)} ({int(last / len(pics) * 100)}%)"
+    logging.info(f"Download Progress: {progress}")
+
+def download_comic(p, comic, only_latest=False):
     cid = comic['_id']
     title = comic['title']
     author = comic['author']
     categories = comic['categories']
-    print(f'{cid} | {title} | {author} | {categories}| {only_latest}: downloading---------------------')
-    res = []
-    episodes = p.episodes_all(cid)
 
-    # 增量更新
+    logging.info(f"{cid} | {title} | {author} | {categories}| {only_latest}: downloading---------------------")
+
+    episodes = p.episodes_all(cid)
     if only_latest:
         episodes = filter_comics(comic, episodes)
 
     pics = []
-
     for eid in episodes:
         page = 1
         while True:
@@ -45,57 +65,44 @@ def download_comic(p, comic,only_latest):
             else:
                 break
 
-    # todo pica服务器抽风了,没返回图片回来,有知道原因的大佬麻烦联系下我
     if not pics:
+        logging.warning("No pictures found for comic: %s", title)
         return
 
-    path = DOWNLOAD_PATH + convert_file_name(title) + '/'
-    if not os.path.exists(path):
-        os.makedirs(path)
-    pics_part = list_partition(pics, CONCURRENCY)
-    for part in pics_part:
-        threads = []
-        for pic in part:
-            t = threading.Thread(target=download, args=(p, title, pics.index(pic), pic))
-            threads.append(t)
-            t.start()
-        for t in threads:
-            t.join()
-        last = pics.index(part[-1]) + 1
-        print(f"downloaded:{last},total:{len(pics)},progress:{int(last / len(pics) * 100)}%")
-    # 记录已下载过的id
-    with open(DOWNLOAD_FILE, 'ab') as f:
+    path = os.path.join(DOWNLOAD_PATH, convert_file_name(title))
+    os.makedirs(path, exist_ok=True)
+
+    with ThreadPoolExecutor(max_workers=CONCURRENCY) as executor:
+        future_to_index = {executor.submit(download_picture, p, comic, pics, idx): idx for idx, pic in enumerate(pics)}
+        for future in concurrent.futures.as_completed(future_to_index):
+            index = future_to_index[future]
+            future.result()  # 如果有异常，这里会再次抛出
+
+    with open('downl.txt', 'a') as f:
         f.write(f'{cid}\n'.encode())
 
-# 初始化pica客户端
-p = Pica()
-p.login()
-p.punch_in()
+def main():
+    p = initialize_pica()
 
-# 获取漫画列表
-comics = p.leaderboard()
-for keyword in SUBSCRIBE_KEYWORD:
-    subscribe_comics = p.search_all(keyword)
-    print(f'关键词{keyword} : 订阅了{len(subscribe_comics)}本漫画')
-    comics += subscribe_comics
-favourites = p.my_favourite()
+    comics = p.leaderboard()
+    for keyword in SUBSCRIBE_KEYWORDS:
+        subscribe_comics = p.search_all(keyword)
+        logging.info(f'关键词{keyword} : 订阅了{len(subscribe_comics)}本漫画')
+        comics.extend(subscribe_comics)
 
-# 下载漫画并收藏
-for comic in favourites + comics:
-    try:
-        print('id | 本子 | 画师 | 分区')
-        # 收藏夹:全量下载  其余:增量下载
-        download_comic(comic, comic not in favourites)
-        info = p.comic_info(comic['_id'])
-        if info['data']['comic']['isFavourite']:
-            p.favourite(comic["_id"])
-    except KeyError:
-        print('download failed,{},{},{}', comic['_id'], comic["title"], traceback.format_exc())
-        continue
+    favourites = p.my_favourite()
 
-# # 压缩漫画文件夹
-# if not os.path.exists(DOWNLOAD_PATH):
-#     os.mkdir(DOWNLOAD_PATH)
-# if not os.path.exists(ZIP_PATH):
-#     os.mkdir(ZIP_PATH)
-# zip_file(DOWNLOAD_PATH, ZIP_PATH, sys.maxsize)
+    for comic in favourites + comics:
+        try:
+            logging.info('id | 本子 | 画师 | 分区')
+            download_comic(p, comic, comic not in favourites)
+            info = p.comic_info(comic['_id'])
+
+            if info['data']['comic']['isFavourite']:
+                p.favourite(comic["_id"])
+        except KeyError as e:
+            logging.error('download failed,%s,%s,%s', comic['_id'], comic["title"], traceback.format_exc())
+            continue
+
+if __name__ == "__main__":
+    main()

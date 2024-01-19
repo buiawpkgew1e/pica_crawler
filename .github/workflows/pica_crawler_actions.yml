@@ -8,7 +8,7 @@ on:
   push:
     paths:
       - '**.py'
-      - '**.yml'
+      - '.github/workflows/pica_crawler_actions.yml'
 
 jobs:
   main:
