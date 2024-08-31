@@ -21,7 +21,8 @@ list2 = [
 
 # 使用set去除重复项
 new_list = list(set(list2))
-
+print(f"去重后列表长度为 {len(new_list)}")
+print(f"去重后列表为 {new_list}")
 output_file_path = 'new_list.txt'
 
 try:
