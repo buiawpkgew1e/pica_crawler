@@ -44,7 +44,7 @@ jobs:
           git add downl.txt
           git add run_time_history.txt
           7z a -r "comics/finder-result.zip" "comics/*"
-          git commit -m "去重复和集合排序"
+          git commit -m "更新"
       - name: Push
         uses:  ad-m/github-push-action@master
         with:
