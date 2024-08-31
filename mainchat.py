@@ -6,15 +6,14 @@ import threading
 import time
 import traceback
 import shutil
-import os
 import requests
-from datetime import datetime
 
 from client import Pica
 from util import *
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf8')
 
+# only_latest: true增量下载    false全量下载
 def download_comic(comic, only_latest):
     """
     下载漫画
@@ -49,21 +48,24 @@ def download_comic(comic, only_latest):
     if not pics:  # 若无图片则直接返回
         return
 
-    path = os.path.join('./comics', convert_file_name(title))  # 漫画文件夹路径
-    os.makedirs(path, exist_ok=True)  # 若文件夹不存在则创建
-
-    def download_thread(pic):
-        download(p, title, pics.index(pic), pic)
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=int(get_cfg('crawl', 'concurrency'))) as executor:
-        executor.map(download_thread, pics)
-
-    print(f'Downloaded {len(pics)} images', flush=True)  # 打印下载进度
-
+    path = './comics/' + convert_file_name(title) + '/'  # 漫画文件夹路径
+    if not os.path.exists(path):  # 若文件夹不存在则创建
+        os.makedirs(path)
+    pics_part = list_partition(pics, int(get_cfg('crawl', 'concurrency')))  # 将图片列表按指定数量划分为多个部分
+    for part in pics_part:  # 遍历每个图片部分
+        threads = []  # 线程列表
+        for pic in part:  # 遍历每个图片
+            t = threading.Thread(target=download, args=(p, title, pics.index(pic), pic))  # 创建下载线程
+            threads.append(t)
+            t.start()
+        for t in threads:  # 等待所有线程下载完成
+            t.join()
+        last = pics.index(part[-1]) + 1  # 计算已下载的图片数量
+        print("downloaded:%d,total:%d,progress:%s%%" % (last, len(pics), int(last / len(pics) * 100)), flush=True)  # 打印下载进度
     # 记录已下载过的id
-    with open('./downl.txt', 'ab') as f:
-        f.write((str(cid) + '\n').encode())
-
+    f = open('./downl.txt', 'ab')
+    f.write((str(cid) + '\n').encode())
+    f.close()
     # 下载每本漫画的间隔时间
     if os.environ.get("INTERVAL_TIME"):
         time.sleep(int(os.environ.get("INTERVAL_TIME")))
@@ -80,12 +82,12 @@ comics = p.leaderboard()
 keywords = os.environ.get("SUBSCRIBE_KEYWORD", "").split(',')
 for keyword in keywords:
     subscribe_comics = p.search_all(keyword)
-    print(f'关键词{keyword} : 订阅了{len(subscribe_comics)}本漫画', flush=True)
+    print('关键词%s : 订阅了%d本漫画' % (keyword, len(subscribe_comics)), flush=True)
     comics += subscribe_comics
 
 # 收藏夹的漫画
 favourites = p.my_favourite_all()
-print(f'收藏夹共计{len(favourites)}本漫画', flush=True)
+print('收藏夹共计%d本漫画' % (len(favourites)), flush=True)
 print('id | 本子 | 画师 | 分区', flush=True)
 
 for comic in favourites + comics:
@@ -96,13 +98,14 @@ for comic in favourites + comics:
         # 收藏夹中的漫画被下载后,自动取消收藏,避免下次运行时重复下载
         if info["data"]['comic']['isFavourite']:
             p.favourite(comic["_id"])
-    except Exception as e:
-        print(f'download failed,{comic["_id"]},{comic["title"]},{traceback.format_exc()}', flush=True)
+    except:
+        print('download failed,{},{},{}', comic['_id'], comic["title"], traceback.format_exc(), flush=True)
         continue
 
 # 记录上次运行时间
-with open('./run_time_history.txt', 'ab') as f:
-    f.write((datetime.now().strftime('%Y-%m-%d %H:%M:%S') + '\n').encode())
+f = open('./run_time_history.txt', 'ab')
+f.write((str(datetime.strftime(datetime.now(),'%Y-%m-%d %H:%M:%S')) + '\n').encode())
+f.close()
 
 # 打包成zip文件, 并删除旧数据 , 删除comics文件夹会导致docker挂载报错
 if os.environ.get("PACKAGE_TYPE", "False") == "True":
