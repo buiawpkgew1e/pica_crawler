@@ -26,30 +26,26 @@ def download_comic(comic, only_latest):
     author = comic["author"]  # 漫画作者
     categories = comic["categories"]  # 漫画分类
     episodes = p.episodes_all(cid)  # 获取漫画所有话数
-
     # 增量更新
     if only_latest:
         episodes = filter_comics(comic, episodes)  # 筛选需要下载的话数
-    if not episodes:
+    if episodes:
+        print('%s | %s | %s | %s | %s:downloading---------------------' % (cid, title, author, categories,only_latest), flush=True)  # 打印下载信息
+    else:
         return  # 无话数可下载则直接返回
-
-    print(f'{cid} | {title} | {author} | {categories} | {only_latest}: downloading---------------------', flush=True)  # 打印下载信息
 
     pics = []  # 图片列表
     for eid in episodes:  # 遍历每个话数
         page = 1
         while True:
-            response = p.picture(cid, eid["order"], page)
-            if response.status_code != 200:
-                print(f'Failed to fetch pictures for episode {eid["order"]}', flush=True)
-                break
-            docs = response.json()["data"]["pages"]["docs"]  # 获取当前话数的图片列表
+            docs = json.loads(p.picture(cid, eid["order"], page).content)["data"]["pages"]["docs"]  # 获取当前话数的图片列表
             page += 1
             if docs:  # 若有图片
-                pics.extend([i['media']['fileServer'] + '/static/' + i['media']['path'] for i in docs])  # 将图片路径添加到列表中
+                pics.extend(list(map(lambda i: i['media']['fileServer'] + '/static/' + i['media']['path'], docs)))  # 将图片路径添加到列表中
             else:
                 break
 
+    # todo pica服务器抽风了,没返回图片回来,有知道原因的大佬麻烦联系下我
     if not pics:  # 若无图片则直接返回
         return
 
