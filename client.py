@@ -33,33 +33,43 @@ class Pica:
         kwargs.setdefault("allow_redirects", True)
         header = self.headers.copy()
         ts = str(int(time()))
-        raw = url.replace(base, "") + ts + header["nonce"] + method + header["api-key"]
-        hc = hmac.new(os.environ["PICA_SECRET_KEY"].encode(), raw.lower().encode(), hashlib.sha256)
+        raw = url.replace(base, "") + str(ts) + header["nonce"] + method + header["api-key"]
+        print('PICA_SECRET_KEY: ' + os.environ["PICA_SECRET_KEY"], flush=True)
+        hc = hmac.new(os.environ["PICA_SECRET_KEY"].encode(), digestmod=hashlib.sha256)
+        hc.update(raw.lower().encode())
         header["signature"] = hc.hexdigest()
         header["time"] = ts
         kwargs.setdefault("headers", header)
         proxy = os.environ.get("REQUEST_PROXY")
-        proxies = {'http': proxy, 'https': proxy} if proxy else None
-        try:
-            response = self.__s.request(method=method, url=url, verify=False, proxies=proxies, **kwargs)
-            response.raise_for_status()  # 增加错误处理
-        except requests.RequestException as e:
-            raise Exception(f"Request failed: {e}")
+        if proxy:
+            proxies = {'http': proxy, 'https': proxy}
+        else:
+            proxies = None
+        response = self.__s.request(method=method, url=url, verify=False, proxies=proxies, **kwargs)
         return response
 
     def login(self):
         url = base + "auth/sign-in"
         send = {"email": os.environ.get("PICA_ACCOUNT"), "password": os.environ.get("PICA_PASSWORD")}
-        response = self.http_do("POST", url=url, json=send).json()
-        if response["code"] != 200:
+        response = self.http_do("POST", url=url, json=send).text
+        print("login response:{}".format(response), flush=True)
+        if json.loads(response)["code"] != 200:
             raise Exception('PICA_ACCOUNT/PICA_PASSWORD ERROR')
-        if 'token' not in response["data"]:
+        if 'token' not in response:
             raise Exception('PICA_SECRET_KEY ERROR')
-        self.headers["authorization"] = response["data"]["token"]
+        self.headers["authorization"] = json.loads(response)["data"]["token"]
 
     def comics(self, block="", tag="", order="", page=1):
-        args = [("c", block), ("t", tag), ("s", order), ("page", str(page))]
-        params = urlencode([arg for arg in args if arg[1]])
+        args = []
+        if len(block) > 0:
+            args.append(("c", block))
+        if len(tag) > 0:
+            args.append(("t", tag))
+        if len(order) > 0:
+            args.append(("s", order))
+        if page > 0:
+            args.append(("page", str(page)))
+        params = urlencode(args)
         url = f"{base}comics?{params}"
         return self.http_do("GET", url).json()
 
@@ -69,39 +79,43 @@ class Pica:
         args = [("tt", 'H24'), ("ct", 'VC')]
         params = urlencode(args)
         url = f"{base}comics/leaderboard?{params}"
-        return self.http_do("GET", url).json()["data"]["comics"]
+        res = self.http_do("GET", url)
+        return json.loads(res.content.decode("utf-8"))["data"]["comics"]
 
     # 获取本子详细信息
     def comic_info(self, book_id):
         url = f"{base}comics/{book_id}"
-        return self.http_do("GET", url=url).json()
+        res = self.http_do("GET", url=url)
+        return json.loads(res.content.decode())
 
     # 获取本子的章节 一页最大40条
     def episodes(self, book_id, page=1):
         url = f"{base}comics/{book_id}/eps?page={page}"
-        return self.http_do("GET", url=url).json()
+        return self.http_do("GET", url=url)
 
     # 获取本子的全部章节
     def episodes_all(self, book_id) -> list:
-        first_page = self.episodes(book_id)
+        first_page = self.episodes(book_id).json()
         pages = first_page["data"]["eps"]["pages"]
         total = first_page["data"]["eps"]["total"]
-        episodes = first_page["data"]["eps"]["docs"]
-        for page in range(2, pages + 1):
-            episodes.extend(self.episodes(book_id, page)["data"]["eps"]["docs"])
-        episodes.sort(key=lambda x: x['order'])
+        episodes = list(first_page["data"]["eps"]["docs"])
+        while pages > 1:
+            episodes.extend(list(self.episodes(book_id, pages).json()["data"]["eps"]["docs"]))
+            pages -= 1
+        episodes = sorted(episodes, key=lambda x: x['order'])
         if len(episodes) != total:
-            raise Exception(f'wrong number of episodes, expect: {total}, actual: {len(episodes)}')
+            raise Exception('wrong number of episodes,expect:' + total + ',actual:' + len(episodes))
         return episodes
 
     # 根据章节获取图片
     def picture(self, book_id, ep_id, page=1):
         url = f"{base}comics/{book_id}/order/{ep_id}/pages?page={page}"
-        return self.http_do("GET", url=url).json()
+        return self.http_do("GET", url=url)
 
     def search(self, keyword, page=1, sort=Order_Latest):
         url = f"{base}comics/advanced-search?page={page}"
-        return self.http_do("POST", url=url, json={"keyword": keyword, "sort": sort}).json()["data"]["comics"]
+        res = self.http_do("POST", url=url, json={"keyword": keyword, "sort": sort})
+        return json.loads(res.content.decode("utf-8"))["data"]["comics"]
 
     def search_all(self, keyword):
         comics = []
@@ -109,41 +123,39 @@ class Pica:
             pages = self.search(keyword)["pages"]
             for page in range(1, pages + 1):
                 docs = self.search(keyword, page)["docs"]
-                res = [i for i in docs if (datetime.now() - datetime.strptime(i["updated_at"], "%Y-%m-%dT%H:%M:%S.%fZ")).days <= int(os.environ["SUBSCRIBE_DAYS"])]
-                comics.extend(res)
+                res = [i for i in docs if
+                       (datetime.now() - datetime.strptime(i["updated_at"], "%Y-%m-%dT%H:%M:%S.%fZ")).days <= int(
+                           os.environ["SUBSCRIBE_DAYS"])]
+                comics += res
                 if len(docs) != len(res):
                     break
         return comics
 
-    # 分区
     def categories(self):
         url = f"{base}categories"
-        return self.http_do("GET", url=url).json()
+        return self.http_do("GET", url=url)
 
     # 收藏/取消收藏本子
     def favourite(self, book_id):
         url = f"{base}comics/{book_id}/favourite"
-        return self.http_do("POST", url=url).json()
+        return self.http_do("POST", url=url)
 
     # 获取收藏夹-分页
     def my_favourite(self, page=1):
         url = f"{base}users/favourite?page={page}"
-        return self.http_do("GET", url=url).json()["data"]["comics"]
+        res = self.http_do("GET", url=url)
+        return json.loads(res.content.decode())["data"]["comics"]
 
     # 获取收藏夹-全部
     def my_favourite_all(self):
         comics = []
         pages = self.my_favourite()["pages"]
         for page in range(1, pages + 1):
-            comics.extend(self.my_favourite(page)["docs"])
+            comics += self.my_favourite(page)["docs"]
         return comics
 
     # 打卡
     def punch_in(self):
         url = f"{base}/users/punch-in"
-        return self.http_do("POST", url=url).json()
-
-    # 漫画-高级搜索
-    def advanced_search(self, keyword, page=1, sort=Order_Latest):
-        url = f"{base}comics/advanced-search?page={page}"
-        return self.http_do("POST", url=url, json={"keyword": keyword, "sort": sort}).json()["data"]["comics"]
+        res = self.http_do("POST", url=url)
+        return json.loads(res.content.decode())
