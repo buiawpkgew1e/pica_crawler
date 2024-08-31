@@ -41,16 +41,16 @@ jobs:
           INTERVAL_TIME: 5
         run: |
           python main.py
+          git config --local user.email "actions@github.com"
+          git config --local user.name "GitHub Actions"
           git add downl.txt
           git add run_time_history.txt
           7z a -r "comics/finder-result.zip" "comics/*"
-      - name: commit & push
-        uses: actions-go/push@master
+          git commit -m "更新"
+      - name: Push
+        uses:  ad-m/github-push-action@master
         with:
-          author-email: 'actions@github.com'
-          author-name: 'GitHub Actions'
-          commit-message: 'update downloaded comics'
-          token: ${{ secrets.GIT_TOKEN }}
+              branch: master
       - name: Get Time
         run: |
             echo "TAG_TIME=$(date +"%Y-%m-%d-%H-%M")" >> $GITHUB_ENV
