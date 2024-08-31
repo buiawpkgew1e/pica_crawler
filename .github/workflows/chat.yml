@@ -41,6 +41,8 @@ jobs:
           INTERVAL_TIME: 5
         run: |
           python mainchat.py
+          git config --local user.email "actions@github.com"
+          git config --local user.name "GitHub Actions"
           git add downl.txt
           git add run_time_history.txt
           7z a -r "comics/finder-result.zip" "comics/*"
