@@ -29,7 +29,7 @@ output_file_path = 'new_list.txt'
 try:
     with open(output_file_path, 'w', encoding='utf-8') as file:
         for item in new_list:
-            file.write(f"{item}\n")
+            file.write(f"{item},")
     print(f"结果已保存到 {output_file_path} 文件中。")
 except Exception as e:
     print(f"保存文件时发生错误: {e}")
