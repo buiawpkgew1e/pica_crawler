@@ -8,7 +8,7 @@ on:
   push:
     paths:
       - 'main.py'
-      - '.github/workflows/pica.yml'
+      - '.github/workflows/pica1-40.yml'
 
 jobs:
   main:
