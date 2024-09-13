@@ -61,8 +61,8 @@ jobs:
         uses: marvinpinto/action-automatic-releases@v1.2.1
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          automatic_release_tag: "${{ env.TAG_TIME }}"
+          automatic_release_tag: "1-40-${{ env.TAG_TIME }}"
           prerelease: true
-          title: "finder-result ${{ env.DISPLAY_TIME }}"
+          title: "finder-result 1-40 ${{ env.DISPLAY_TIME }}"
           files: |
             comics/finder-result.zip
