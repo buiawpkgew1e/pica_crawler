@@ -9,7 +9,7 @@ import shutil
 import requests
 
 from client import Pica
-from util import *
+from utilai import *
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf8')
 
