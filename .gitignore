@@ -5,7 +5,5 @@ __pycache__
 *.txt
 logs/*
 output/*
-comics/*
-config/config.ini
 .vscode
 .env
