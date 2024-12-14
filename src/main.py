@@ -182,8 +182,6 @@ for keyword in keywords:
 
 # 收藏夹的漫画
 favourited_comics = pica_server.my_favourite_all()
-print('已下载共计%d本漫画' % get_downloaded_comic_count(db_path), flush=True)
-print('收藏夹共计%d本漫画' % (len(favourited_comics)), flush=True)
 isChangeFavo = os.environ.get("CHANGE_FAVOURITE", False) == "True"
 
 for comic in (ranked_comics + favourited_comics + searched_comics):
@@ -234,4 +232,7 @@ if os.environ.get("BARK_URL"):
         f"关键词漫画共计{len(searched_comics)}" +
         f"收藏夹漫画共计{len(favourited_comics)}"
     )
+
+print('已下载共计%d本漫画' % get_downloaded_comic_count(db_path), flush=True)
+print('收藏夹共计%d本漫画' % (len(favourited_comics)), flush=True)
 print("RUN COMPLETED!")
