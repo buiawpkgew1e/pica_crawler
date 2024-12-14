@@ -5,6 +5,10 @@ on:
   #schedule:
     #- cron: "0 0 * * *"
   workflow_dispatch:
+  push:
+    paths:
+      - 'main.py'
+      - '.github/workflows/pica_crawler_actions.yml'
 
 jobs:
   main:
@@ -16,6 +20,7 @@ jobs:
           python-version: "3.10"
       - name: install dependency
         run: |
+          pip install --upgrade pip
           pip install urllib3
           pip install requests
       - name: main logic
@@ -39,35 +44,25 @@ jobs:
           DETAIL: True
         run: |
           python ./src/main.py
+          git config --local user.email "actions@github.com"
+          git config --local user.name "GitHub Actions"
           git add ./data/downloaded.db
           7z a -r "comics/finder-result.zip" "comics/*"
-      # comics文件夹下的所有漫画都会被打成一个压缩包,并上传到actions artifact. 如果不配置邮箱推送功能,可以用这个来下载到漫画
-      - name: upload-artifact
-        uses: actions/upload-artifact@v4
+          git commit -m "更新"
+      - name: Push
+        uses:  ad-m/github-push-action@master
         with:
-          name: pica-comics
-          path: comics/finder-result.zip
-          # 压缩包90天后会被清除
-          retention-days: 90
-      - name: send email
-        env:
-          EMAIL_ACCOUNT: ${{secrets.EMAIL_ACCOUNT}}
-          EMAIL_AUTH_CODE: ${{secrets.EMAIL_AUTH_CODE}}
-          # 收信邮箱的smtp服务器地址
-          EMAIL_SERVER_HOST: smtp.qq.com
-          # 压缩包的最大大小(MB),也就是收信邮箱支持的最大附件大小 qq/新浪:50  outlook:20
-          EMAIL_ATTACH_SIZE: 50
-          # 收信邮箱服务器的加密方式 true:STARTTLS false:TLS    outlook邮箱只能为true,qq邮箱true和false都可以
-          EMAIL_STARTTLS: true
-          # 收信邮箱服务器的端口
-          EMAIL_SERVER_PORT: 587
+              branch: master
+      - name: Get Time
         run: |
-          python ./src/sendEmail.py
-          echo '如果不需要邮件推送的功能,可以将上一行代码注释掉     首次运行时也建议注释,排行榜上的漫画都没推送过,邮箱接受不了大量的漫画,等首次运行结束后再开启'
-      - name: commit & push
-        uses: actions-go/push@master
+            echo "TAG_TIME=$(date +"%Y-%m-%d-%H-%M")" >> $GITHUB_ENV
+            echo "DISPLAY_TIME=$(date +"%Y-%m-%d %H:%M:%S")" >> $GITHUB_ENV          echo '如果不需要邮件推送的功能,可以将上一行代码注释掉     首次运行时也建议注释,排行榜上的漫画都没推送过,邮箱接受不了大量的漫画,等首次运行结束后再开启'
+      - name: 自动释放
+        uses: marvinpinto/action-automatic-releases@v1.2.1
         with:
-          author-email: 'actions@github.com'
-          author-name: 'GitHub Actions'
-          commit-message: 'update downloaded comics'
-          token: ${{ secrets.GIT_TOKEN }}
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          automatic_release_tag: "${{ env.TAG_TIME }}"
+          prerelease: true
+          title: "finder-result ${{ env.DISPLAY_TIME }}"
+          files: |
+            comics/finder-result.zip
