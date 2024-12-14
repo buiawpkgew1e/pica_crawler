@@ -3,7 +3,7 @@
 env/*
 __pycache__
 .vscode/*
-.idea/*
+*.txt
 logs/*
 output/*
 comics/*
