@@ -40,12 +40,13 @@ jobs:
           BARK_URL: ${{secrets.BARK_URL}}
           #每下载一本漫画的间隔时间(秒),在下载大量漫画时可以设置的稍微大一些,免得哔咔服务器响应不过来
           INTERVAL_TIME: 5
+          #下载阶段是否输出细节信息
+          DETAIL: True
         run: |
-          python main.py
+          python ./src/main.py
           git config --local user.email "actions@github.com"
           git config --local user.name "GitHub Actions"
-          git add downl.txt
-          git add run_time_history.txt
+          git add ./data/downl.db
           7z a -r "comics/finder-result.zip" "comics/*"
           git commit -m "更新"
       - name: Push
@@ -54,11 +55,10 @@ jobs:
               branch: master
       - name: Get Time
         run: |
-            echo "TAG_TIME=$(date +"%Y-%m-%d-%H-%M")" >> $GITHUB_ENV
-            echo "DISPLAY_TIME=$(date +"%Y-%m-%d %H:%M:%S")" >> $GITHUB_ENV
-  
-      - name: 自动释放
-        uses: marvinpinto/action-automatic-releases@v1.2.1
+          python ./src/sendEmail.py
+          echo '如果不需要邮件推送的功能,可以将上一行代码注释掉     首次运行时也建议注释,排行榜上的漫画都没推送过,邮箱接受不了大量的漫画,等首次运行结束后再开启'
+      - name: commit & push
+        uses: actions-go/push@master
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           automatic_release_tag: "${{ env.TAG_TIME }}"
