@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - 'main.py'
+      - 'config/config.ini'
       - '.github/workflows/pica_crawler_actions.yml'
 
 jobs:
