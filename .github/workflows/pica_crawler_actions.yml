@@ -44,11 +44,7 @@ jobs:
           DETAIL: True
         run: |
           python ./src/main.py
-          git config --local user.email "actions@github.com"
-          git config --local user.name "GitHub Actions"
-          git add ./data/downloaded.db
           7z a -r "comics/finder-result.zip" "comics/*"
-          git commit -m "更新"
       - name: Push
         uses:  ad-m/github-push-action@master
         with:
@@ -66,3 +62,9 @@ jobs:
           title: "finder-result ${{ env.DISPLAY_TIME }}"
           files: |
             comics/finder-result.zip
+      - name: "上传"
+        run: |
+          git config --local user.email "actions@github.com"
+          git config --local user.name "GitHub Actions"
+          git add ./data/downloaded.db
+          git commit -m "更新"
