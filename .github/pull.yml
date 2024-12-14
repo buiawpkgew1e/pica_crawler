@@ -1,9 +1,0 @@
-version: "1"
-rules:
-  - base: master
-    upstream: lx1169732264:master
-    mergeMethod: merge
-    assignees:
-      - buiawpkgew1
-    conflictReviewers:
-      - buiawpkgew1
