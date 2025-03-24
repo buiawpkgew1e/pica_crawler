@@ -35,11 +35,14 @@ jobs:
           git add ./data/downloaded.db
           git add ./logs
           7z a -r "comics/finder-result.zip" "comics/*"
+          git config --local user.email "actions@github.com"
+          git config --local user.name "GitHub Actions"
+          git commit -m "Update: $(date +"%Y-%m-%d %H:%M:%S") - 自动更新下载记录和日志"
       # comics文件夹下的所有漫画都会被打成一个压缩包,并上传到actions artifact. 如果不配置邮箱推送功能,可以用这个来下载到漫画
-      - name: upload-artifact
-        uses: actions/upload-artifact@v4
-        with:
-              branch: master
+      # - name: upload-artifact
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #         branch: master
       - name: Get Time
         run: |
             echo "TAG_TIME=$(date +"%Y-%m-%d-%H-%M")" >> $GITHUB_ENV
