@@ -1,10 +1,9 @@
 name: pica1-40
 
 on:
-  #将下面两行代码取消注释
-  #schedule:
-    #- cron: "0 0 * * *"
-  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * *"  # 每天UTC 00:00运行
+  workflow_dispatch:  # 允许手动触发
   push:
     paths:
       - 'main.py'
@@ -13,17 +12,33 @@ on:
 jobs:
   main:
     runs-on: ubuntu-latest
+    timeout-minutes: 360  # 设置任务超时时间为6小时
     steps:
-      - uses: actions/checkout@main
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v4  # 使用最新的稳定版本
+        with:
+          fetch-depth: 1  # 优化克隆深度
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.10"
-      - name: install dependency
+          cache: pip  # 启用pip缓存
+
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
         run: |
-          pip install --upgrade pip
-          pip install urllib3
-          pip install requests
-      - name: main logic
+          python -m pip install --upgrade pip
+          pip install urllib3 requests
+        continue-on-error: true  # 允许安装失败时继续执行
+        retries: 3  # 失败时重试3次
+      - name: Run crawler
         env:
           PICA_SECRET_KEY: ${{secrets.PICA_SECRET_KEY}}
           PICA_ACCOUNT: ${{secrets.PICA_ACCOUNT}}
@@ -41,28 +56,41 @@ jobs:
           #每下载一本漫画的间隔时间(秒),在下载大量漫画时可以设置的稍微大一些,免得哔咔服务器响应不过来
           INTERVAL_TIME: 5
         run: |
-          python src/main.py
+          # 运行爬虫脚本
+          python ./src/main.py || exit 1  # 如果脚本失败则退出
+
+      - name: Prepare artifacts
+        if: success()
+        run: |
+          # 压缩comics目录，排除不必要的文件
+          7z a -r "comics/finder-result.zip" "comics/*" -x!*.tmp -x!*.log
+
+      - name: Update repository
+        if: success()
+        run: |
           git config --local user.email "actions@github.com"
           git config --local user.name "GitHub Actions"
-          git add downl.txt
-          git add run_time_history.txt
-          7z a -r "comics/finder-result.zip" "comics/*"
-          git commit -m "更新"
-      - name: Push
-        uses:  ad-m/github-push-action@master
+          git add ./data/downloaded.db ./logs
+          git commit -m "Update: $(date +"%Y-%m-%d %H:%M:%S") - 自动更新下载记录和日志"
+      - name: Push changes
+        uses: ad-m/github-push-action@master
+        if: success()
         with:
-              branch: master
-      - name: 获取当前时间
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: master
+
+      - name: Set release time
+        if: success()
         run: |
-            echo "TAG_TIME=$(date +"%Y-%m-%d-%H-%M")" >> $GITHUB_ENV
-            echo "DISPLAY_TIME=$(date +"%Y-%m-%d %H:%M:%S")" >> $GITHUB_ENV
-  
-      - name: 自动释放
+          echo "TAG_TIME=$(date +"%Y-%m-%d-%H-%M")" >> $GITHUB_ENV
+          echo "DISPLAY_TIME=$(date +"%Y-%m-%d %H:%M:%S")" >> $GITHUB_ENV
+
+      - name: Create release
         uses: marvinpinto/action-automatic-releases@v1.2.1
+        if: success()
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           automatic_release_tag: "1-40-${{ env.TAG_TIME }}"
           prerelease: true
-          title: "finder-result 1-40 ${{ env.DISPLAY_TIME }}"
-          files: |
-            comics/finder-result.zip
+          title: "Finder Result 1-40 ${{ env.DISPLAY_TIME }}"
+          files: comics/finder-result.zip
