@@ -34,7 +34,22 @@ jobs:
           python ./src/main.py
           git add ./data/downloaded.db
           git add ./logs
-          7z a -r "comics/finder-result.zip" "comics/*"
+          
+          # 检查comics目录大小并进行分片压缩
+          total_size=$(du -sb comics | cut -f1)
+          if [ $total_size -gt 1073741824 ]; then
+            # 如果超过1GB，则进行分片压缩
+            cd comics
+            split -b 1G -d --additional-suffix=.part . parts/
+            for part in parts/*; do
+              7z a -r "${part}.zip" "$part"
+            done
+            cd ..
+          else
+            # 否则进行普通压缩
+            7z a -r "comics/finder-result.zip" "comics/*"
+          fi
+          
           git config --local user.email "actions@github.com"
           git config --local user.name "GitHub Actions"
           git commit -m "Update: $(date +"%Y-%m-%d %H:%M:%S") - 自动更新下载记录和日志"
@@ -55,7 +70,8 @@ jobs:
           prerelease: true
           title: "finder-result ${{ env.DISPLAY_TIME }}"
           files: |
-            comics/finder-result.zip
+            comics/*.zip
+            comics/parts/*.zip
       - name: "上传"
         run: |
           git config --local user.email "actions@github.com"
