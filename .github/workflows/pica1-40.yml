@@ -41,7 +41,7 @@ jobs:
           #每下载一本漫画的间隔时间(秒),在下载大量漫画时可以设置的稍微大一些,免得哔咔服务器响应不过来
           INTERVAL_TIME: 5
         run: |
-          python main.py
+          python src/main.py
           git config --local user.email "actions@github.com"
           git config --local user.name "GitHub Actions"
           git add downl.txt
