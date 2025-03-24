@@ -25,249 +25,383 @@ class Pica:
     Order_Point   = "vd"  # 最多指名
 
     def __init__(self) -> None:
+        """初始化Pica客户端，设置会话和请求头"""
         self.__s = requests.session()
         self.__s.verify = False
         parser = ConfigParser()
         parser.read('./config/config.ini', encoding='utf-8')
         self.headers = dict(parser.items('header'))
         self.timeout = int(get_cfg("crawl", "request_time_out", 10))
+        self.__s.mount('http://', requests.adapters.HTTPAdapter(max_retries=3))
+        self.__s.mount('https://', requests.adapters.HTTPAdapter(max_retries=3))
 
-    def http_do(self, method, url, max_retries=3, **kwargs):
-        """执行HTTP请求，包含重试机制和错误处理
-
+    def http_do(self, method: str, url: str, **kwargs) -> requests.Response:
+        """执行HTTP请求，添加必要的认证信息
+        
         Args:
-            method (str): HTTP方法(GET/POST等)
-            url (str): 请求URL
-            max_retries (int, optional): 最大重试次数. Defaults to 3.
-            **kwargs: 其他请求参数
-
+            method: HTTP请求方法
+            url: 请求URL
+            **kwargs: 请求的其他参数
+            
         Returns:
-            Response: requests响应对象
-
+            requests.Response: HTTP响应对象
+            
         Raises:
-            Exception: 请求失败且重试次数用尽时抛出异常
+            requests.exceptions.RequestException: 当请求失败时抛出
         """
-        kwargs.setdefault("allow_redirects", True)
-        header = self.headers.copy()
-        ts = str(int(time()))
-        raw = url.replace(base, "") + str(ts) + header["nonce"] + method + header["api-key"]
-        hc = hmac.new(get_cfg("param", "pica_secret_key").encode(), digestmod=hashlib.sha256)
-        hc.update(raw.lower().encode())
-        header["signature"] = hc.hexdigest()
-        header["time"] = ts
-        kwargs.setdefault("headers", header)
-        proxy = get_cfg("param", "request_proxy")
-        if proxy:
-            proxies = {'http': proxy, 'https': proxy}
-        else:
-            proxies = None
+        try:
+            kwargs.setdefault("allow_redirects", True)
+            header = self.headers.copy()
+            ts = str(int(time()))
+            raw = url.replace(base, "") + str(ts) + header["nonce"] + method + header["api-key"]
+            hc = hmac.new(get_cfg("param", "pica_secret_key").encode(), digestmod=hashlib.sha256)
+            hc.update(raw.lower().encode())
+            header["signature"] = hc.hexdigest()
+            header["time"] = ts
+            kwargs.setdefault("headers", header)
+            
+            proxy = get_cfg("param", "request_proxy")
+            proxies = {'http': proxy, 'https': proxy} if proxy else None
+            
+            response = self.__s.request(
+                method=method,
+                url=url,
+                verify=False,
+                proxies=proxies,
+                timeout=self.timeout,
+                **kwargs
+            )
+            response.raise_for_status()
+            return response
+        except requests.exceptions.RequestException as e:
+            logging.error(f"HTTP请求失败: {url}, 错误: {str(e)}")
+            raise
 
-        for retry in range(max_retries):
-            try:
-                response = self.__s.request(
-                    method=method, url=url, verify=False,
-                    proxies=proxies, timeout=self.timeout, **kwargs
-                )
-                response.raise_for_status()
-                return response
-            except requests.exceptions.Timeout:
-                logging.warning(f"Request timeout for {url}, attempt {retry + 1} of {max_retries}")
-                if retry == max_retries - 1:
-                    raise
-            except requests.exceptions.RequestException as e:
-                logging.error(f"Request failed for {url}: {str(e)}, attempt {retry + 1} of {max_retries}")
-                if retry == max_retries - 1:
-                    raise
-            time.sleep(1 * (retry + 1))  # 指数退避重试
+    def login(self) -> None:
+        """登录并获取认证token
+        
+        Raises:
+            Exception: 当登录失败或认证失败时抛出
+        """
+        try:
+            url = base + "auth/sign-in"
+            send = {
+                "email": get_cfg('param', 'pica_account'),
+                "password": get_cfg('param', 'pica_password')
+            }
+            response = self.http_do("POST", url=url, json=send)
+            response_data = response.json()
+            
+            if response_data["code"] != 200:
+                raise Exception('PICA_ACCOUNT/PICA_PASSWORD ERROR')
+            if 'token' not in response.text:
+                raise Exception('PICA_SECRET_KEY ERROR')
+                
+            self.headers["authorization"] = response_data["data"]["token"]
+            logging.info("登录成功")
+        except Exception as e:
+            logging.error(f"登录失败: {str(e)}")
+            raise
 
-    def login(self):
-        url = base + "auth/sign-in"
-        send = {
-            "email": get_cfg('param', 'pica_account'), 
-            "password": get_cfg('param', 'pica_password')
-        }
-        response = self.http_do("POST", url=url, json=send).text
-        print("login response:{}".format(response), flush=True)
-        if json.loads(response)["code"] != 200:
-            raise Exception('PICA_ACCOUNT/PICA_PASSWORD ERROR')
-        if 'token' not in response:
-            raise Exception('PICA_SECRET_KEY ERROR')
-        self.headers["authorization"] = json.loads(response)["data"]["token"]
-
-    def comics(self, block="", tag="", order="", page=1):
-        args = []
-        if len(block) > 0:
-            args.append(("c", block))
-        if len(tag) > 0:
-            args.append(("t", tag))
-        if len(order) > 0:
-            args.append(("s", order))
-        if page > 0:
-            args.append(("page", str(page)))
-        params = urlencode(args)
-        url = f"{base}comics?{params}"
-        return self.http_do("GET", url).json()
+    def comics(self, block: str = "", tag: str = "", order: str = "", page: int = 1) -> dict:
+        """获取漫画列表
+        
+        Args:
+            block: 分区
+            tag: 标签
+            order: 排序方式
+            page: 页码
+            
+        Returns:
+            dict: 漫画列表数据
+        """
+        try:
+            args = []
+            if block:
+                args.append(("c", block))
+            if tag:
+                args.append(("t", tag))
+            if order:
+                args.append(("s", order))
+            if page > 0:
+                args.append(("page", str(page)))
+                
+            params = urlencode(args)
+            url = f"{base}comics?{params}"
+            response = self.http_do("GET", url)
+            return response.json()
+        except Exception as e:
+            logging.error(f"获取漫画列表失败: {str(e)}")
+            return {"data": {"comics": []}}
 
     # 排行榜
     def leaderboard(self) -> list:
-        # tt的可选值: H24, D7, D30   分别代表每天/周/月
-        args = [("tt", 'H24'), ("ct", 'VC')]
-        params = urlencode(args)
-        url = f"{base}comics/leaderboard?{params}"
-        res = self.http_do("GET", url)
-        return json.loads(res.content.decode("utf-8"))["data"]["comics"]
+        """获取排行榜数据
+        
+        Returns:
+            list: 排行榜漫画列表
+        """
+        try:
+            # tt的可选值: H24, D7, D30   分别代表每天/周/月
+            args = [("tt", 'H24'), ("ct", 'VC')]
+            params = urlencode(args)
+            url = f"{base}comics/leaderboard?{params}"
+            
+            response = self.http_do("GET", url)
+            return response.json()["data"]["comics"]
+        except Exception as e:
+            logging.error(f"获取排行榜数据失败: {str(e)}")
+            return []
 
-    # 获取本子详细信息
-    def comic_info(self, book_id):
-        url = f"{base}comics/{book_id}"
-        res = self.http_do("GET", url=url)
-        return json.loads(res.content.decode())
+    def comic_info(self, book_id: str) -> dict:
+        """获取漫画详细信息
+        
+        Args:
+            book_id: 漫画ID
+            
+        Returns:
+            dict: 漫画详细信息
+            
+        Raises:
+            Exception: 当获取信息失败时抛出
+        """
+        try:
+            url = f"{base}comics/{book_id}"
+            response = self.http_do("GET", url=url)
+            return response.json()
+        except Exception as e:
+            logging.error(f"获取漫画信息失败: {book_id}, 错误: {str(e)}")
+            return {"data": {"comic": {}}}
 
-    # 获取本子的章节 一页最大40条
-    def episodes(self, book_id, current_page):
-        url = f"{base}comics/{book_id}/eps?page={current_page}"
-        return self.http_do("GET", url=url)
+    def episodes(self, book_id: str, current_page: int) -> requests.Response:
+        """获取漫画章节信息，每页最多40条
+        
+        Args:
+            book_id: 漫画ID
+            current_page: 当前页码
+            
+        Returns:
+            requests.Response: HTTP响应对象
+            
+        Raises:
+            requests.exceptions.RequestException: 当请求失败时抛出
+        """
+        try:
+            url = f"{base}comics/{book_id}/eps?page={current_page}"
+            return self.http_do("GET", url=url)
+        except Exception as e:
+            logging.error(f"获取章节信息失败: {book_id}, 页码: {current_page}, 错误: {str(e)}")
+            raise
 
     def episodes_all(self, book_id: str, title: str) -> list:
         """获取漫画的所有章节信息
-
+        
         Args:
-            book_id (str): 漫画ID
-            title (str): 漫画标题
-
+            book_id: 漫画ID
+            title: 漫画标题
+            
         Returns:
-            list: 章节信息列表，每个元素包含章节的详细信息
-                 如果获取失败则返回空列表
+            list: 所有章节信息列表
         """
         episode_list = []
         try:
-            # 获取第一页数据以及总页数信息
             first_page_data = self.episodes(book_id, current_page=1).json()
-            if not first_page_data.get('data'):
-                logging.warning(f'漫画章节信息缺失，可能已被删除: {title}(ID:{book_id})')
+            if 'data' not in first_page_data:
+                logging.info(f'漫画章节信息缺失，可能已被删除: {title}, {book_id}')
                 return []
 
-            eps_data = first_page_data['data']['eps']
-            total_pages = eps_data['pages']      # 总页数
-            total_episodes = eps_data['total']   # 总章节数
-            episode_list = list(eps_data['docs'])
-
-            # 获取剩余页面的章节数据
-            for page in range(total_pages, 1, -1):
-                try:
-                    page_data = self.episodes(book_id, page).json()
-                    additional_episodes = page_data['data']['eps']['docs']
-                    episode_list.extend(list(additional_episodes))
-                except (KeyError, requests.exceptions.RequestException) as e:
-                    logging.error(f'获取漫画{title}第{page}页章节失败: {str(e)}')
-                    continue
-
-            # 按章节顺序排序
-            episode_list = sorted(episode_list, key=lambda x: x['order'])
-
-            # 验证章节完整性
-            if len(episode_list) != total_episodes:
-                logging.warning(
-                    f'漫画{title}章节数量不匹配: 期望{total_episodes}章, 实际获取{len(episode_list)}章'
-                )
-
-        except KeyError as e:
-            logging.error(f'漫画{title}数据结构异常: {str(e)}')
-        except requests.exceptions.RequestException as e:
-            logging.error(f'获取漫画{title}章节信息失败: {str(e)}')
-        except Exception as e:
-            logging.error(f'获取漫画{title}章节时发生未知错误: {str(e)}')
-
-        return episode_list
-
-    # 根据章节获取图片
-    def picture(self, book_id, ep_id, page=1):
-        url = f"{base}comics/{book_id}/order/{ep_id}/pages?page={page}"
-        return self.http_do("GET", url=url)
-
-    def search(self, keyword, page=1, sort=Order_Latest):
-        url = f"{base}comics/advanced-search?page={page}"
-        res = self.http_do("POST", url=url, json={"keyword": keyword, "sort": sort})
-        return json.loads(res.content.decode("utf-8"))["data"]["comics"]
-
-    def search_all(self, keyword: str) -> list:
-        """搜索所有匹配关键词的漫画
-
-        Args:
-            keyword (str): 搜索关键词
-
-        Returns:
-            list: 匹配的漫画列表
-        """
-        comics = []
-        if not keyword:
-            logging.warning('搜索关键词为空，返回空列表')
-            return comics
-
-        try:
-            # 获取总页数
-            first_page_result = self.search(keyword)
-            total_pages = first_page_result['pages']
-            comics.extend(first_page_result['docs'])
-
-            # 获取剩余页面的数据
+            total_pages = first_page_data["data"]["eps"]["pages"]
+            total_episodes = first_page_data["data"]["eps"]["total"]
+            episode_list = list(first_page_data["data"]["eps"]["docs"])
+            
+            # 获取剩余页面的章节信息
             for page in range(2, total_pages + 1):
                 try:
-                    page_docs = self.search(keyword, page)['docs']
-                    comics.extend(page_docs)
-                except (KeyError, requests.exceptions.RequestException) as e:
-                    logging.error(f'获取第{page}页搜索结果失败: {str(e)}')
+                    page_data = self.episodes(book_id, page).json()
+                    additional_episodes = page_data["data"]["eps"]["docs"]
+                    episode_list.extend(list(additional_episodes))
+                except Exception as e:
+                    logging.error(f"获取第{page}页章节信息失败: {title}, 错误: {str(e)}")
                     continue
-
-        except (KeyError, requests.exceptions.RequestException) as e:
-            logging.error(f'搜索漫画失败，关键词: {keyword}, 错误: {str(e)}')
+            
+            # 按章节顺序排序
+            episode_list = sorted(episode_list, key=lambda x: x['order'])
+            
+            # 验证章节数量
+            if len(episode_list) != total_episodes:
+                logging.warning(
+                    f"章节数量不匹配: {title}, 预期: {total_episodes}, 实际: {len(episode_list)}"
+                )
+        except KeyError as e:
+            logging.error(f"漫画数据缺失: {title}, KeyError: {e}")
         except Exception as e:
-            logging.error(f'搜索漫画时发生未知错误，关键词: {keyword}, 错误: {str(e)}')
+            logging.error(f"获取全部章节失败: {title}, 错误: {str(e)}")
+            
+        return episode_list
 
-        return comics
-                recent_comics = [comic for comic in page_docs if
-                    (
-                        (
-                            datetime.now() - 
-                            datetime.strptime(comic["updated_at"], "%Y-%m-%dT%H:%M:%S.%fZ")
-                        ).days
-                    ) <= int(get_cfg('filter', 'subscribe_days'))]
-                subscribed_comics += recent_comics
+    def picture(self, book_id: str, ep_id: str, page: int = 1) -> requests.Response:
+        """获取章节的图片信息
+        
+        Args:
+            book_id: 漫画ID
+            ep_id: 章节ID
+            page: 页码
+            
+        Returns:
+            requests.Response: HTTP响应对象
+            
+        Raises:
+            requests.exceptions.RequestException: 当请求失败时抛出
+        """
+        try:
+            url = f"{base}comics/{book_id}/order/{ep_id}/pages?page={page}"
+            return self.http_do("GET", url=url)
+        except Exception as e:
+            logging.error(f"获取图片信息失败: 漫画ID {book_id}, 章节ID {ep_id}, 页码 {page}, 错误: {str(e)}")
+            raise
 
-                # Check if any comics in the current page exceed the subscribe time limit.
-                # If there are any comics that do not meet the time criteria, it is assumed
-                # that subsequent pages will also contain outdated comics, so the search
-                # is stopped early to save unnecessary requests.
+    def search(self, keyword: str, page: int = 1, sort: str = Order_Latest) -> dict:
+        """搜索漫画
+        
+        Args:
+            keyword: 搜索关键词
+            page: 页码
+            sort: 排序方式
+            
+        Returns:
+            dict: 搜索结果
+        """
+        url = f"{base}comics/advanced-search?page={page}"
+        try:
+            res = self.http_do("POST", url=url, json={"keyword": keyword, "sort": sort})
+            return json.loads(res.content.decode("utf-8"))["data"]["comics"]
+        except (json.JSONDecodeError, KeyError) as e:
+            logging.error(f"搜索解析失败: {keyword}, 错误: {str(e)}")
+            return {"docs": [], "pages": 0}
+
+    def search_all(self, keyword: str) -> list:
+        """搜索所有符合条件的漫画
+        
+        Args:
+            keyword: 搜索关键词
+            
+        Returns:
+            list: 符合条件的漫画列表
+        """
+        subscribed_comics = []
+        if not keyword:
+            return subscribed_comics
+            
+        try:
+            total_pages_num = self.search(keyword)["pages"]
+            subscribe_days = int(get_cfg('filter', 'subscribe_days'))
+            
+            for current_page in range(1, total_pages_num + 1):
+                page_docs = self.search(keyword, current_page)["docs"]
+                if not page_docs:
+                    break
+                    
+                # 使用生成器表达式优化内存使用
+                recent_comics = [
+                    comic for comic in page_docs
+                    if (datetime.now() - datetime.strptime(
+                        comic["updated_at"], "%Y-%m-%dT%H:%M:%S.%fZ"
+                    )).days <= subscribe_days
+                ]
+                
+                subscribed_comics.extend(recent_comics)
+                
+                # 如果当前页面有不符合时间条件的漫画，提前结束搜索
                 if len(page_docs) != len(recent_comics):
                     break
-
+                    
+        except Exception as e:
+            logging.error(f"搜索全部漫画失败: {keyword}, 错误: {str(e)}")
+            
         return subscribed_comics
 
     def categories(self):
         url = f"{base}categories"
         return self.http_do("GET", url=url)
 
-    # 收藏/取消收藏本子
-    def favourite(self, book_id):
-        url = f"{base}comics/{book_id}/favourite"
-        return self.http_do("POST", url=url)
+    def favourite(self, book_id: str) -> requests.Response:
+        """收藏或取消收藏漫画
+        
+        Args:
+            book_id: 漫画ID
+            
+        Returns:
+            requests.Response: HTTP响应对象
+            
+        Raises:
+            requests.exceptions.RequestException: 当请求失败时抛出
+        """
+        try:
+            url = f"{base}comics/{book_id}/favourite"
+            response = self.http_do("POST", url=url)
+            response.raise_for_status()
+            return response
+        except Exception as e:
+            logging.error(f"收藏操作失败: 漫画ID {book_id}, 错误: {str(e)}")
+            raise
 
-    # 获取收藏夹-分页
-    def my_favourite(self, page=1):
-        url = f"{base}users/favourite?page={page}"
-        res = self.http_do("GET", url=url)
-        return json.loads(res.content.decode())["data"]["comics"]
+    def my_favourite(self, page: int = 1) -> dict:
+        """获取收藏夹中的漫画（分页）
+        
+        Args:
+            page: 页码
+            
+        Returns:
+            dict: 收藏的漫画列表数据
+        """
+        try:
+            url = f"{base}users/favourite?page={page}"
+            response = self.http_do("GET", url=url)
+            return response.json()["data"]["comics"]
+        except Exception as e:
+            logging.error(f"获取收藏夹分页数据失败: 页码 {page}, 错误: {str(e)}")
+            return {"docs": [], "pages": 0}
 
-    # 获取收藏夹-全部
-    def my_favourite_all(self):
+    def my_favourite_all(self) -> list:
+        """获取收藏夹中的所有漫画
+        
+        Returns:
+            list: 所有收藏的漫画列表
+        """
         comics = []
-        pages = self.my_favourite()["pages"]
-        for page in range(1, pages + 1):
-            comics += self.my_favourite(page)["docs"]
+        try:
+            first_page = self.my_favourite()
+            pages = first_page['pages']
+            comics.extend(first_page["docs"])
+            
+            for page in range(2, pages + 1):
+                try:
+                    page_comics = self.my_favourite(page)
+                    comics.extend(page_comics["docs"])
+                except Exception as e:
+                    logging.error(f"获取收藏夹第{page}页数据失败: {str(e)}")
+                    continue
+        except Exception as e:
+            logging.error(f"获取全部收藏夹数据失败: {str(e)}")
+            
         return comics
 
-    # 打卡
-    def punch_in(self):
-        url = f"{base}/users/punch-in"
-        res = self.http_do("POST", url=url)
-        return json.loads(res.content.decode())
+    def punch_in(self) -> dict:
+        """用户打卡
+        
+        Returns:
+            dict: 打卡结果
+            
+        Raises:
+            requests.exceptions.RequestException: 当请求失败时抛出
+        """
+        try:
+            url = f"{base}/users/punch-in"
+            response = self.http_do("POST", url=url)
+            result = response.json()
+            logging.info("打卡成功")
+            return result
+        except Exception as e:
+            logging.error(f"打卡失败: {str(e)}")
+            raise
+
