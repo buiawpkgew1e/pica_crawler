@@ -1,7 +1,7 @@
 # 项目简介
 
 一个哔咔漫画的下载程序,基于python实现,欢迎各位绅士来捉虫
-* 目前已实现按 排行榜/收藏夹/指定关键词 进行下载的功能
+* 目前已实现按 排行榜/收藏夹/指定关键词/漫画id 进行下载的功能
 * 本项目是基于[AnkiKong大佬开源的项目](https://github.com/AnkiKong/picacomic)编写的,仅供技术研究使用,请勿用于其他用途,有问题可以提issue
 * 麻烦给个star支持一下:heart:
 
@@ -15,6 +15,9 @@
 
 ### 关键词订阅
 `./config/config.ini`里的`subscribe_keyword`里配置若干个关键词,下载范围等同于在哔咔app里用关键词搜索到的所有漫画
+
+### 根据漫画id下载
+`./config/config.ini`里的`specific_comics_ids`内添加需要下载的漫画id，使用英文逗号','分割. 具体的,漫画id为在网页端进入漫画详情页,地址栏链接里的 `comic/` 之后的内容就是漫画ID
 
 ### 部分漫画不会被下载的原因
 排行榜/订阅的漫画会受到以下过滤逻辑的影响,**收藏夹则不会**(如果下载到本地后文件丢失了,可以通过放入收藏夹把它全量下载下来)
@@ -58,10 +61,24 @@
 3. 在项目根目录下运行`docker build -t picacg-download:latest .`
 4. 启动容器的脚本
 ```shell
-docker run --name picacg-download-container -d 
-    -v ./comics:/app/comics #挂载存放下载漫画图片的文件夹
-    -v ./output:/app/output #挂载存放压缩包的文件夹(如果配置了需要打包)
+docker run --name picacg-download-container -d \
+    #挂载存放下载漫画图片的文件夹
+    -v ./comics:/app/comics \
+    #挂载存放压缩包的文件夹(如果配置了需要打包)
+    -v ./output:/app/output \
+    #挂载存放下载漫画pdf格式的文件夹(如果配置了转换为pdf格式)
+    -v ./comics_pdf:/app/comics_pdf \
+    #挂载存放下载漫画cbz格式的文件夹(如果配置了转换为cbz格式)
+    -v ./comics_cbz:/app/comics_cbz \
     #-e 添加环境变量可以覆盖config.ini中的配置, 免去重新build的操作
+    picacg-download:latest
+```
+```shell
+docker run --name picacg-download-container -d \
+    -v ./comics:/app/comics \
+    -v ./output:/app/output \
+    -v ./comics_pdf:/app/comics_pdf \
+    -v ./comics_cbz:/app/comics_cbz \
     picacg-download:latest
 ```
 
@@ -120,8 +137,9 @@ docker run --name picacg-download-container -d
 
 # CHANGELOG
 
-| 日期         | 说明                                                                                                                                                                                              |
-|------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 日期         | 说明                                                                                                                                                                                                |
+|------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 2025/12/21 | 感谢`sfiisf`提供的贡献: 1.新增漫画ID下载功能 2.支持导出PDF和CBZ格式 3.手动触发工作流提供开关选项                                                                                                                                     |
 | 2025/08/08 | `config.ini`分流配置的默认值调整,增加注释说明                                                                                                                                                                     |
 | 2025/03/01 | 调整日志编码格式为utf-8,避免漫画名带有emoji字符时报错                                                                                                                                                                |
 | 2025/01/06 | 删除了`.gitignore`文件中`*.db`的配置,这项配置会导致GitHub Actions执行`git add ./data/downloaded.db`指令时报错`The following paths are ignored by one of your .gitignore files`. 如果远程仓库已有`./data/downloaded.db`这个文件的话不会报错 |

@@ -386,22 +386,24 @@ class Pica:
             
         return comics
 
-    def punch_in(self) -> dict:
-        """用户打卡
-        
-        Returns:
-            dict: 打卡结果
-            
-        Raises:
-            requests.exceptions.RequestException: 当请求失败时抛出
-        """
-        try:
-            url = f"{base}/users/punch-in"
-            response = self.http_do("POST", url=url)
-            result = response.json()
-            logging.info("打卡成功")
-            return result
-        except Exception as e:
-            logging.error(f"打卡失败: {str(e)}")
-            raise
+    # 打卡
+    def punch_in(self):
+        url = f"{base}/users/punch-in"
+        res = self.http_do("POST", url=url)
+        return json.loads(res.content.decode())
 
+    # 通过id列表获取漫画列表
+    def comics_by_ids(self, ids):
+        comics = []
+        for id in ids:
+            try:
+                comic = self.comic_info(id)
+                if 'data' in comic and 'comic' in comic['data']:
+                    comics.append(comic["data"]["comic"])
+                else:
+                    print(f'Invalid comic id,{id}')
+                    # logging.info(f'Invalid comic id,{id}')
+            except Exception as e:
+                    print(f"An error occurred while fetching comic info for comic id {id}. Error: {e}")
+                # logging.error(f"An error occurred while fetching comic info for comic id {id}. Error: {e}")
+        return comics

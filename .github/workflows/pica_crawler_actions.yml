@@ -1,10 +1,47 @@
 name: pica_crawler
 
 on:
-  #将下面两行代码取消注释
+  # 定时触发工作流  需要定时任务则将下面两行代码取消注释
   #schedule:
     #- cron: "0 0 * * *"
+  # 手动触发工作流
   workflow_dispatch:
+    # 配置读取优先级为 环境变量 > config.ini > 程序预设的默认值
+    # 用户在手动触发界面上填入的参数值会写入环境变量, 从而临时修改本次运行的配置, 无需频繁调整config.ini文件
+    # inputs下的变量只在手动触发工作流时生效, 定时触发时取到的是'', 此时又会回退到从config.ini文件取值
+    inputs:
+      SEND_EMAIL:
+        description: '是否发送邮件'
+        type: boolean
+        default: false
+      COMMIT_AND_UPLOAD:
+        description: '是否提交并上传下载记录到仓库'
+        type: boolean
+        default: false
+      MERGE_EPISODES:
+        description: '将同一本漫画的不同章节进行合并'
+        type: boolean
+        default: false
+      DOWNLOAD_RANKED_COMICS:
+        description: '是否下载排行榜漫画'
+        type: boolean
+        default: false
+      DOWNLOAD_FAVOURITE_COMICS:
+        description: '是否下载收藏夹漫画'
+        type: boolean
+        default: false
+      SPECIFIC_COMICS_IDS:
+        description: '根据漫画id指定下载,多个id用逗号分隔'
+        type: string
+        default: ''
+      EXPORT_PDF:
+        description: '是否导出为pdf'
+        type: boolean
+        default: false
+      EXPORT_CBZ:
+        description: '是否导出为cbz'
+        type: boolean
+        default: false
   push:
     paths:
       - 'config/config.ini'
@@ -13,16 +50,18 @@ on:
 jobs:
   main:
     runs-on: ubuntu-latest
+    env:
+      # 是否发送邮件  如果是定时触发，SEND_EMAIL默认为True；如果是手动触发，则为用户输入值
+      SEND_EMAIL: ${{ github.event_name == 'schedule' && 'True' || (inputs.SEND_EMAIL && 'True' || 'False') }}
+      # 是否提交并上传下载记录到仓库
+      COMMIT_AND_UPLOAD: ${{ github.event_name == 'schedule' && 'True' || (inputs.COMMIT_AND_UPLOAD && 'True' || 'False') }}
     steps:
       - uses: actions/checkout@main
       - uses: actions/setup-python@v5.2.0
         with:
           python-version: "3.10"
       - name: install dependency
-        run: |
-          pip install --upgrade pip
-          pip install urllib3
-          pip install requests
+        run: pip install urllib3 requests pillow
       - name: main logic
         env:
           PICA_SECRET_KEY: ${{secrets.PICA_SECRET_KEY}}
@@ -30,6 +69,18 @@ jobs:
           PICA_PASSWORD: ${{secrets.PICA_PASSWORD}}
           # 允许在下载完成后发送自定义消息,为空则不发送 例: https://api.day.app/{your_keys}/picacg下载成功
           BARK_URL: ${{secrets.BARK_URL}}
+          # 是否将同一本漫画的不同章节进行合并     在定时触发工作流时inputs下的变量为空,此时会从config.ini配置中取值
+          MERGE_EPISODES: ${{ inputs.MERGE_EPISODES }}
+          # 是否下载排行榜
+          DOWNLOAD_RANKED_COMICS: ${{ inputs.DOWNLOAD_RANKED_COMICS }}
+          # 是否下载收藏夹
+          DOWNLOAD_FAVOURITE_COMICS: ${{ inputs.DOWNLOAD_FAVOURITE_COMICS }}
+          # 根据漫画id指定下载，为空则不进行指定下载
+          SPECIFIC_COMICS_IDS: ${{ inputs.SPECIFIC_COMICS_IDS }}
+          # 是否导出为pdf
+          EXPORT_PDF: ${{ inputs.EXPORT_PDF }}
+          # 是否导出为cbz
+          EXPORT_CBZ: ${{ inputs.EXPORT_CBZ }}
         run: |
           python ./src/main.py
           git add ./data/downloaded.db
@@ -65,6 +116,28 @@ jobs:
       - name: 自动释放
         uses: marvinpinto/action-automatic-releases@v1.2.1
         with:
+          name: pica-comics
+          path: |
+            comics/
+            comics_pdf/
+            comics_cbz/
+          # 压缩包90天后会被清除
+          retention-days: 90
+      # 发送邮件
+      - name: send email
+        # 上方SEND_EMAIL环境变量取值不为True时,该step会被跳过运行
+        if: env.SEND_EMAIL == 'True'
+        env:
+          EMAIL_ACCOUNT: ${{secrets.EMAIL_ACCOUNT}}
+          EMAIL_AUTH_CODE: ${{secrets.EMAIL_AUTH_CODE}}
+          # 收信邮箱的smtp服务器地址
+          EMAIL_SERVER_HOST: smtp.qq.com
+          # 压缩包的最大大小(MB),也就是收信邮箱支持的最大附件大小 qq/新浪:50  outlook:20
+          EMAIL_ATTACH_SIZE: 50
+          # 收信邮箱服务器的加密方式 true:STARTTLS false:TLS    outlook邮箱只能为true,qq邮箱true和false都可以
+          EMAIL_STARTTLS: true
+          # 收信邮箱服务器的端口
+          EMAIL_SERVER_PORT: 587
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           automatic_release_tag: "${{ env.TAG_TIME }}"
           prerelease: true
@@ -74,7 +147,14 @@ jobs:
             comics/parts/*.zip
       - name: "上传"
         run: |
-          git config --local user.email "actions@github.com"
-          git config --local user.name "GitHub Actions"
-          git add ./data/downloaded.db
-          git commit -m "更新"
+          sudo apt-get install -y p7zip-full p7zip-rar
+          python ./src/sendEmail.py
+      #提交并上传下载记录到仓库
+      - name: commit & push
+        if: env.COMMIT_AND_UPLOAD == 'True'
+        uses: actions-go/push@master
+        with:
+          author-email: 'actions@github.com'
+          author-name: 'GitHub Actions'
+          commit-message: 'update downloaded comics'
+          token: ${{ secrets.GIT_TOKEN }}
