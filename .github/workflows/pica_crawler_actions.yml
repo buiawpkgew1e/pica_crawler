@@ -42,10 +42,6 @@ on:
         description: '是否导出为cbz'
         type: boolean
         default: false
-  push:
-    paths:
-      - 'config/config.ini'
-      - '.github/workflows/pica_crawler_actions.yml'
 
 jobs:
   main:
@@ -85,36 +81,9 @@ jobs:
           python ./src/main.py
           git add ./data/downloaded.db
           git add ./logs
-          
-          # 检查comics目录大小并进行分片压缩
-          total_size=$(du -sb comics | cut -f1)
-          if [ $total_size -gt 1073741824 ]; then
-            # 如果超过1GB，则进行分片压缩
-            cd comics
-            split -b 1G -d --additional-suffix=.part . parts/
-            for part in parts/*; do
-              7z a -r "${part}.zip" "$part"
-            done
-            cd ..
-          else
-            # 否则进行普通压缩
-            7z a -r "comics/finder-result.zip" "comics/*"
-          fi
-          
-          git config --local user.email "actions@github.com"
-          git config --local user.name "GitHub Actions"
-          git commit -m "Update: $(date +"%Y-%m-%d %H:%M:%S") - 自动更新下载记录和日志"
       # comics文件夹下的所有漫画都会被打成一个压缩包,并上传到actions artifact. 如果不配置邮箱推送功能,可以用这个来下载到漫画
-      # - name: upload-artifact
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #         branch: master
-      - name: Get Time
-        run: |
-            echo "TAG_TIME=$(date +"%Y-%m-%d-%H-%M")" >> $GITHUB_ENV
-            echo "DISPLAY_TIME=$(date +"%Y-%m-%d %H:%M:%S")" >> $GITHUB_ENV
-      - name: 自动释放
-        uses: marvinpinto/action-automatic-releases@v1.2.1
+      - name: upload-artifact
+        uses: actions/upload-artifact@v4
         with:
           name: pica-comics
           path: |
@@ -123,10 +92,6 @@ jobs:
             comics_cbz/
           # 压缩包90天后会被清除
           retention-days: 90
-     - name: "上传"
-        run: |
-          sudo apt-get install -y p7zip-full p7zip-rar
-          python ./src/sendEmail.py
       #提交并上传下载记录到仓库
       - name: commit & push
         if: env.COMMIT_AND_UPLOAD == 'True'
