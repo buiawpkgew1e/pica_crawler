@@ -123,29 +123,7 @@ jobs:
             comics_cbz/
           # 压缩包90天后会被清除
           retention-days: 90
-      # 发送邮件
-      - name: send email
-        # 上方SEND_EMAIL环境变量取值不为True时,该step会被跳过运行
-        if: env.SEND_EMAIL == 'True'
-        env:
-          EMAIL_ACCOUNT: ${{secrets.EMAIL_ACCOUNT}}
-          EMAIL_AUTH_CODE: ${{secrets.EMAIL_AUTH_CODE}}
-          # 收信邮箱的smtp服务器地址
-          EMAIL_SERVER_HOST: smtp.qq.com
-          # 压缩包的最大大小(MB),也就是收信邮箱支持的最大附件大小 qq/新浪:50  outlook:20
-          EMAIL_ATTACH_SIZE: 50
-          # 收信邮箱服务器的加密方式 true:STARTTLS false:TLS    outlook邮箱只能为true,qq邮箱true和false都可以
-          EMAIL_STARTTLS: true
-          # 收信邮箱服务器的端口
-          EMAIL_SERVER_PORT: 587
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          automatic_release_tag: "${{ env.TAG_TIME }}"
-          prerelease: true
-          title: "finder-result ${{ env.DISPLAY_TIME }}"
-          files: |
-            comics/*.zip
-            comics/parts/*.zip
-      - name: "上传"
+     - name: "上传"
         run: |
           sudo apt-get install -y p7zip-full p7zip-rar
           python ./src/sendEmail.py
