@@ -100,4 +100,4 @@ jobs:
           author-email: 'actions@github.com'
           author-name: 'GitHub Actions'
           commit-message: 'update downloaded comics'
-          token: ${{ secrets.GIT_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
